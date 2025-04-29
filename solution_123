@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+usage() {
+  echo "Usage: $0 [--max_depth N] INPUT_DIR OUTPUT_DIR" >&2
+  exit 1
+}
+MAX_DEPTH=0   
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --max_depth)
+      [[ $# -ge 2 ]] || usage
+      MAX_DEPTH="$2"
+      shift 2
+      ;;
+    -h|--help) usage ;;
+    *) break ;;
+  esac
+done
+[[ $# -eq 2 ]] || usage
+INPUT_DIR="$(realpath "$1")"
+OUTPUT_DIR="$(realpath "$2")"
+[[ -d "$INPUT_DIR" ]] || { echo "error: $INPUT_DIR is not a directory" >&2; exit 1; }
+mkdir -p "$OUTPUT_DIR"
+copy_file() {
+  local src="$1"
+  local rel="${src#"$INPUT_DIR"/}"      # путь внутри input
+  local dest
+  if (( MAX_DEPTH > 0 )); then
+    # разбиваем относительный путь на части
+    IFS='/' read -ra parts <<< "$rel"
+    if (( ${#parts[@]} > MAX_DEPTH )); then
+      local keep_dirs
+      keep_dirs=$(printf "/%s" "${parts[@]:0:MAX_DEPTH}")
+      keep_dirs="${keep_dirs#/}"
+      dest="$OUTPUT_DIR/$keep_dirs/$(basename "$src")"
+    else
+      dest="$OUTPUT_DIR/$rel"
+    fi
+  else
+    dest="$OUTPUT_DIR/$(basename "$src")"
+  fi
+  mkdir -p "$(dirname "$dest")"
+  if [[ -e "$dest" ]]; then
+    local dir base name ext i
+    dir=$(dirname "$dest")
+    base=$(basename "$dest")
+    name="${base%.*}"
+    ext="${base##*.}"
+    [[ "$base" != *.* ]] && ext=""      
+    [[ -n "$ext" ]] && ext=".$ext"
+    i=1
+    while [[ -e "$dir/${name}${i}${ext}" ]]; do ((i++)); done
+    dest="$dir/${name}${i}${ext}"
+  fi
+  cp -p "$src" "$dest"
+}
+export -f copy_file
+export INPUT_DIR OUTPUT_DIR MAX_DEPTH
+find "$INPUT_DIR" -type f -print0 | xargs -0 -I{} bash -c 'copy_file "$0"' {}
