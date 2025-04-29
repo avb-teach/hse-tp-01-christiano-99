@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+usage() { echo "Usage: $0 INPUT_DIR OUTPUT_DIR [--max_depth N]" >&2; exit 1; }
+[[ $# -lt 2 ]] && usage
+INPUT_DIR=$(realpath "$1")
+OUTPUT_DIR=$(realpath "$2")
+shift 2
+MAX_DEPTH=""
+[[ $# -ge 2 && $1 == "--max_depth" ]] && { MAX_DEPTH="$2"; shift 2; }
+[[ -d "$INPUT_DIR" ]] || { echo "$INPUT_DIR is not a directory" >&2; exit 1; }
+mkdir -p "$OUTPUT_DIR"
+copy() {
+  local src="$1"
+  local rel="${src#$INPUT_DIR/}"
+  local dest
+  if [[ -n "$MAX_DEPTH" ]]; then
+    IFS='/' read -ra parts <<< "$rel"
+    if (( ${#parts[@]} > MAX_DEPTH )); then
+      rel=$(printf "/%s" "${parts[@]:0:MAX_DEPTH}")
+      rel=${rel#/}
+    fi
+    dest="$OUTPUT_DIR/$rel/$(basename "$src")"
+    mkdir -p "$(dirname "$dest")"
+  else
+    dest="$OUTPUT_DIR/$(basename "$src")"
+  fi
+  if [[ -e "$dest" ]]; then
+    local dir base name ext i
+    dir=$(dirname "$dest")
+    base=$(basename "$dest")
+    name=${base%.*}
+    ext=${base##*.}
+    [[ $base == *.* ]] || ext=""
+    [[ -n $ext ]] && ext=".$ext"
+    i=1
+    while [[ -e "$dir/${name}${i}${ext}" ]]; do ((i++)); done
+    dest="$dir/${name}${i}${ext}"
+  fi
+  cp -p "$src" "$dest"
+}
+export -f copy INPUT_DIR OUTPUT_DIR MAX_DEPTH
+find "$INPUT_DIR" -type f -print0 | xargs -0 -I{} bash -c 'copy "$0"' {}
