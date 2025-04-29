@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 2 ]] || { echo "Usage: $0 INPUT_DIR OUTPUT_DIR" >&2; exit 1; }
+INPUT_DIR="$(realpath "$1")"
+OUTPUT_DIR="$(realpath "$2")"
+[[ -d $INPUT_DIR ]] || { echo "$INPUT_DIR is not a directory" >&2; exit 1; }
+mkdir -p "$OUTPUT_DIR"
+declare -A seen
+copy_file() {
+  local src="$1" name base ext idx dest
+  name="$(basename "$src")"
+  base="${name%.*}"
+  ext="${name##*.}"
+  [[ $name == *.* ]] || ext=""
+  idx=${seen["$name"]:-0}
+  dest="$OUTPUT_DIR/${base}${idx:+$idx}${ext:+.$ext}"
+  while [[ -e $dest ]]; do
+    ((idx++))
+    dest="$OUTPUT_DIR/${base}${idx}${ext:+.$ext}"
+  done
+  seen["$name"]=$((idx+1))
+  cp -p -- "$src" "$dest"
+}
+export -f copy_file OUTPUT_DIR
+find "$INPUT_DIR" -type f -print0 |
+  while IFS= read -r -d '' f; do
+    copy_file "$f"
+  done
