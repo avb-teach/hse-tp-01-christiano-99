@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -lt 2 ]] && { echo "Usage: $0 INPUT_DIR OUTPUT_DIR [--max_depth N]" >&2; exit 1; }
+INPUT_DIR=$(realpath "$1")
+OUTPUT_DIR=$(realpath "$2")
+MAX_DEPTH=""
+[[ "${3:-}" == "--max_depth" && -n "${4:-}" ]] && MAX_DEPTH=$4
+mkdir -p "$OUTPUT_DIR"
+python3 - <<'PY'
+import os, shutil, sys
+input_dir  = os.environ["INPUT_DIR"]
+output_dir = os.environ["OUTPUT_DIR"]
+md         = os.environ.get("MAX_DEPTH", "")
+max_depth  = int(md) if md else None
+counts = {}
+def depth(p, base): rel = os.path.relpath(p, base); return 0 if rel == "." else rel.count(os.sep)+1
+for root, dirs, files in os.walk(input_dir):
+    if max_depth is not None and depth(root, input_dir) > max_depth:
+        dirs[:] = []
+        continue
+    for fname in files:
+        src = os.path.join(root, fname)
+        base, ext = os.path.splitext(fname)
+        n = counts.get(fname, 0)
+        counts[fname] = n + 1
+        name = f"{base}{n}{ext}" if n else fname
+        shutil.copy2(src, os.path.join(output_dir, name))
+PY
